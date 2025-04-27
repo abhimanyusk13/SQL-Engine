@@ -37,4 +37,6 @@ COMMIT;
 SELECT id, name FROM users;
 1    Alice
 2    Bob
+
+engine will serve multiple statements over TCP
 */
