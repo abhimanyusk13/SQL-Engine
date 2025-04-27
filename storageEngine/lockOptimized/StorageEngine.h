@@ -52,6 +52,20 @@ public:
     std::vector<RecordID> scanTable(const std::string &tableName,
                                     int64_t txId);
 
+    // in StorageEngine.h (public API)
+    /// Replay‐level calls from WAL recovery
+    void redoInsert(const std::string &tableName,
+        const RecordID &rid,
+        const std::vector<FieldValue> &newValues);
+
+    void redoDelete(const std::string &tableName,
+        const RecordID &rid);
+
+    void redoUpdate(const std::string &tableName,
+        const RecordID &rid,
+        const std::vector<FieldValue> &newValues);
+
+
 private:
     struct TableData {
         std::unique_ptr<TableHeap> heap;

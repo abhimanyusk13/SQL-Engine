@@ -117,3 +117,33 @@ std::vector<FieldValue> StorageEngine::fetchRecord(const std::string &tableName,
     Record rec = ti.heap->getRecord(rid);
     return rec.getValues();
 }
+
+void StorageEngine::redoInsert(const std::string &table, 
+    const RecordID &rid, 
+    const std::vector<FieldValue> &vals) 
+{
+    // Direct page/slot write; assumes TableHeap::insertAt exists
+    auto &td = tables_.at(table);
+    td.heap->insertAt(rid, vals);              // low‐level
+    // update PK index
+    int32_t pk = std::get<int32_t>(vals[td.pkColIdx]);
+    td.index->insert(pk, rid);
+}
+
+void StorageEngine::redoDelete(const std::string &table,
+    const RecordID &rid)
+{
+    auto &td = tables_.at(table);
+    td.heap->deleteAt(rid);                    // low‐level
+    // remove from PK index
+    // you’ll have to look up the key or store it in an auxiliary map
+}
+
+void StorageEngine::redoUpdate(const std::string &table,
+    const RecordID &rid,
+    const std::vector<FieldValue> &vals)
+{
+    auto &td = tables_.at(table);
+    td.heap->updateAt(rid, vals);              // low‐level
+    // if PK changed, update index accordingly (rare)
+}
