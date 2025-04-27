@@ -6,8 +6,8 @@ TableHeap::TableHeap(FileManager &fm, BufferManager &bm,
                      const Schema &schema)
     : fm_(fm), bm_(bm), schema_(schema) {
     // Compute sizes
-    recordSize_ = schema_.getRecordSize();
-    slotSize_   = recordSize_ + 1;  // 1 byte for tombstone
+    recordSize_    = schema_.getRecordSize();
+    slotSize_      = recordSize_ + 1;  // 1 byte for tombstone
     maxSlotsPerPage_ =
         (int)((FileManager::PAGE_SIZE - sizeof(int)) / slotSize_);
 
@@ -124,7 +124,66 @@ std::vector<RecordID> TableHeap::tableScan() {
     return results;
 }
 
+Record TableHeap::getRecord(const RecordID &rid) const {
+    char *page = bm_.fetchPage(fileId_, rid.pageId);
+    int numSlots = getNumSlots(page);
+    if (rid.slotNum < 0 || rid.slotNum >= numSlots) {
+        bm_.unpinPage(fileId_, rid.pageId);
+        throw std::runtime_error("Invalid RecordID: slot out of range");
+    }
+    char *slot = getSlotPtr(page, rid.slotNum);
+    if (!isSlotAlive(slot)) {
+        bm_.unpinPage(fileId_, rid.pageId);
+        throw std::runtime_error("Attempt to read deleted record");
+    }
+    Record rec = Record::deserialize(schema_, slot + 1);
+    bm_.unpinPage(fileId_, rid.pageId);
+    return rec;
+}
+
+// --- WAL/Recovery methods ---
+
+void TableHeap::insertAt(const RecordID &rid,
+                         const std::vector<FieldValue> &values)
+{
+    char *page = bm_.fetchPage(fileId_, rid.pageId);
+    int numSlots = getNumSlots(page);
+    // grow slot count if needed
+    if (rid.slotNum >= numSlots) {
+        setNumSlots(page, rid.slotNum + 1);
+    }
+    char *slot = getSlotPtr(page, rid.slotNum);
+    setSlotAlive(slot, true);
+    Record rec(schema_, values);
+    auto buf = rec.serialize();
+    std::memcpy(slot + 1, buf.data(), recordSize_);
+    bm_.markDirty(fileId_, rid.pageId);
+    bm_.unpinPage(fileId_, rid.pageId);
+}
+
+void TableHeap::deleteAt(const RecordID &rid)
+{
+    char *page = bm_.fetchPage(fileId_, rid.pageId);
+    char *slot = getSlotPtr(page, rid.slotNum);
+    setSlotAlive(slot, false);
+    bm_.markDirty(fileId_, rid.pageId);
+    bm_.unpinPage(fileId_, rid.pageId);
+}
+
+void TableHeap::updateAt(const RecordID &rid,
+                         const std::vector<FieldValue> &values)
+{
+    char *page = bm_.fetchPage(fileId_, rid.pageId);
+    char *slot = getSlotPtr(page, rid.slotNum);
+    Record rec(schema_, values);
+    auto buf = rec.serialize();
+    std::memcpy(slot + 1, buf.data(), recordSize_);
+    bm_.markDirty(fileId_, rid.pageId);
+    bm_.unpinPage(fileId_, rid.pageId);
+}
+
 // --- Private helpers ---
+
 int TableHeap::getNumSlots(char *pageData) const {
     int num;
     std::memcpy(&num, pageData, sizeof(num));
@@ -145,21 +204,4 @@ bool TableHeap::isSlotAlive(char *slotPtr) const {
 
 void TableHeap::setSlotAlive(char *slotPtr, bool alive) const {
     slotPtr[0] = alive ? 1 : 0;
-}
-
-Record TableHeap::getRecord(const RecordID &rid) const {
-    // Fetch page
-    char *page = bm_.fetchPage(fileId_, rid.pageId);
-    int numSlots = getNumSlots(page);
-    if (rid.slotNum < 0 || rid.slotNum >= numSlots)
-        throw std::runtime_error("Invalid RecordID: slot out of range");
-    char *slot = getSlotPtr(page, rid.slotNum);
-    if (!isSlotAlive(slot)) {
-        bm_.unpinPage(fileId_, rid.pageId);
-        throw std::runtime_error("Attempt to read deleted record");
-    }
-    // Deserialize
-    Record rec = Record::deserialize(schema_, slot + 1);
-    bm_.unpinPage(fileId_, rid.pageId);
-    return rec;
 }

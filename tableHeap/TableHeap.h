@@ -35,6 +35,16 @@ public:
     // Fetch a record by RecordID
     Record getRecord(const RecordID &rid) const;
 
+    // --- WAL/Recovery methods ---
+    // Replays an insert exactly at (pageId, slotNum)
+    void insertAt(const RecordID &rid,
+                  const std::vector<FieldValue> &values);
+    // Replays a delete (tombstone) at (pageId, slotNum)
+    void deleteAt(const RecordID &rid);
+    // Replays an update (overwrite) at (pageId, slotNum)
+    void updateAt(const RecordID &rid,
+                  const std::vector<FieldValue> &values);
+
 private:
     FileManager &fm_;
     BufferManager &bm_;
@@ -45,9 +55,9 @@ private:
     int maxSlotsPerPage_;        // computed from PAGE_SIZE
 
     // Page layout helpers
-    int getNumSlots(char *pageData) const;
-    void setNumSlots(char *pageData, int numSlots);
-    char *getSlotPtr(char *pageData, int slotIdx) const;
-    bool isSlotAlive(char *slotPtr) const;
-    void setSlotAlive(char *slotPtr, bool alive) const;
+    int    getNumSlots(char *pageData) const;
+    void   setNumSlots(char *pageData, int numSlots);
+    char*  getSlotPtr(char *pageData, int slotIdx) const;
+    bool   isSlotAlive(char *slotPtr) const;
+    void   setSlotAlive(char *slotPtr, bool alive) const;
 };
