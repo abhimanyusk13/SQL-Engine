@@ -51,7 +51,7 @@ struct CommitStmt {};
 
 // Expression AST
 struct Expr {
-    enum class Type { COLUMN_REF, INT_LITERAL, STR_LITERAL, BINARY_OP } type;
+    enum class Type { COLUMN_REF, INT_LITERAL, STR_LITERAL, BINARY_OP, FUNCTION_CALL} type;
     // for COLUMN_REF
     std::string columnName;
     // for literals
@@ -61,6 +61,9 @@ struct Expr {
     std::string op; // =, <, >, AND, OR, etc.
     std::unique_ptr<Expr> left;
     std::unique_ptr<Expr> right;
+    // for FUNCTION_CALL:
+    std::string               functionName;
+    std::vector<Expr*>        args;
 };
 
 // Root AST
