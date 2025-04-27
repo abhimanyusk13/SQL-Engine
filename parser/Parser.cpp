@@ -313,6 +313,29 @@ std::unique_ptr<Expr> Parser::parsePrimary() {
         expect(TokenType::RPAREN, "Expected )");
         return node;
     }
+
+    if (currentToken().type == TokenType::IDENTIFIER &&
+        peekToken().text == "(") {
+        // function call
+        string fname = currentToken().text;
+        consume(); // identifier
+        consume(); // "("
+        vector<Expr*> args;
+        if (currentToken().text != ")") {
+            do {
+                args.push_back(parseExpression());
+                if (currentToken().text == ",") consume();
+                else break;
+            } while (true);
+        }
+        consume(); // ")"
+        auto *e = new Expr();
+        e->type = Expr::Type::FUNCTION_CALL;
+        e->functionName = fname;
+        e->args = std::move(args);
+        return e;
+    }
+
     throw std::runtime_error("Unexpected token in expression: " + tok.text);
 }
 
