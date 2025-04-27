@@ -5,6 +5,8 @@
 #include <unordered_map>
 #include <cstddef>
 #include "FileManager.h"
+#include "MetricsManager.h"
+
 
 class BufferManager {
 public:

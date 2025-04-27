@@ -1,5 +1,6 @@
 // File: BufferManager.cpp
 #include "BufferManager.h"
+#include "MetricsManager.h"
 #include <stdexcept>
 #include <algorithm>
 
@@ -23,6 +24,7 @@ char *BufferManager::fetchPage(int fileId, int pageId) {
     auto it = pageTable_.find(pid);
     if (it != pageTable_.end()) {
         // Already in pool
+        MetricsManager::instance().incBufferHit();
         Frame &f = frames_[it->second];
         f.pinCount++;
         return f.data;
