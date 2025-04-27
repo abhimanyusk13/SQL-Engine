@@ -46,6 +46,26 @@ LogicalOperator* Planner::buildLogicalPlan(const AST &ast) {
             return new LogicalBegin();
         case StmtType::COMMIT:
             return new LogicalCommit();
+        case StmtType::SELECT: {
+            auto *sel = ast.select.get();
+            if (sel->tables.empty()) throw runtime_error("SELECT requires table");
+            // Build initial scan for first table
+            LogicalOperator *plan = new LogicalSeqScan(sel->tables[0]);
+            // For each additional table, build a join
+            for (size_t i = 1; i < sel->tables.size(); ++i) {
+                auto *rhsScan = new LogicalSeqScan(sel->tables[i]);
+                plan = new LogicalJoin(plan, rhsScan);
+            }
+            // Apply WHERE as Filter
+            if (sel->whereClause) {
+                plan = new LogicalFilter(sel->whereClause.get(), plan);
+            }
+            // Finally, Project
+            vector<Expr*> projExprs;
+            for (auto &ePtr : sel->selectList) projExprs.push_back(ePtr.get());
+            plan = new LogicalProject(projExprs, plan);
+            return plan;
+        }
         default:
             throw std::runtime_error("Unsupported statement in planner");
     }

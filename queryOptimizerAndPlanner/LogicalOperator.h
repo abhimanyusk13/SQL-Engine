@@ -10,6 +10,7 @@ enum class LogicalOpType {
     SeqScan,    // table scan
     Filter,     // selection
     Project,    // projection
+    Join,       // join
     Insert,     // insert
     Update,     // update
     Delete,     // delete
@@ -125,4 +126,14 @@ public:
 class LogicalCommit : public LogicalOperator {
 public:
     LogicalCommit() { opType = LogicalOpType::Commit; }
+};
+
+// Join node (cross join)
+class LogicalJoin : public LogicalOperator {
+public:
+    LogicalJoin(LogicalOperator *left, LogicalOperator *right) {
+        opType = LogicalOpType::Join;
+        children.push_back(left);
+        children.push_back(right);
+    }
 };

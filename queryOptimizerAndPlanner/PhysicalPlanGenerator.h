@@ -64,6 +64,22 @@ private:
             colIdx = std::move(outIdx);
             return projOp;
         }
+        case LogicalOpType::Join: {
+            auto *j = static_cast<LogicalJoin*>(logical);
+            // Generate left and right
+            auto *leftOp  = gen(j->children[0], colIdx);
+            // Capture left schema columns
+            auto leftColIdx = colIdx;
+            auto leftCols = colIdx;
+            auto *rightOp = gen(j->children[1], colIdx);
+            // Build combined colIdx
+            std::unordered_map<std::string,int> combined;
+            int pos = 0;
+            for (auto &p : leftColIdx) combined[p.first] = pos++;
+            for (auto &p : colIdx) combined[p.first] = pos++;
+            colIdx = combined;
+            return new NestedLoopJoin(leftOp, rightOp);
+        }
         default:
             throw std::runtime_error("PhysicalPlanGenerator: unsupported logical op type");
         }
