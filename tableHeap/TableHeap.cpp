@@ -146,3 +146,20 @@ bool TableHeap::isSlotAlive(char *slotPtr) const {
 void TableHeap::setSlotAlive(char *slotPtr, bool alive) const {
     slotPtr[0] = alive ? 1 : 0;
 }
+
+Record TableHeap::getRecord(const RecordID &rid) const {
+    // Fetch page
+    char *page = bm_.fetchPage(fileId_, rid.pageId);
+    int numSlots = getNumSlots(page);
+    if (rid.slotNum < 0 || rid.slotNum >= numSlots)
+        throw std::runtime_error("Invalid RecordID: slot out of range");
+    char *slot = getSlotPtr(page, rid.slotNum);
+    if (!isSlotAlive(slot)) {
+        bm_.unpinPage(fileId_, rid.pageId);
+        throw std::runtime_error("Attempt to read deleted record");
+    }
+    // Deserialize
+    Record rec = Record::deserialize(schema_, slot + 1);
+    bm_.unpinPage(fileId_, rid.pageId);
+    return rec;
+}

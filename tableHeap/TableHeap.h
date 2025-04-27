@@ -32,6 +32,8 @@ public:
                       const std::vector<FieldValue> &values);
     // Scan all alive records and return their RecordIDs
     std::vector<RecordID> tableScan();
+    // Fetch a record by RecordID
+    Record getRecord(const RecordID &rid) const;
 
 private:
     FileManager &fm_;
