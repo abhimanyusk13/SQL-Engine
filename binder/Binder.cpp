@@ -1,5 +1,6 @@
 // File: Binder.cpp
 #include "Binder.h"
+#include "FunctionRegistry.h"
 #include <stdexcept>
 #include <sstream>
 #include <algorithm>
@@ -35,7 +36,7 @@ void Binder::bindSelect(SelectStmt *stmt) {
     }
     // Expand '*' into explicit columns
     expandStar(stmt, stmt->tables);
-    // Resolve columns and type-check in select list
+    // Resolve columns, functions, and type-check in select list
     for (auto &e : stmt->selectList) {
         resolveColumnsInExpr(e.get(), stmt->tables);
         typeCheckExpr(e.get(), stmt->tables);
@@ -84,7 +85,7 @@ void Binder::bindUpdate(UpdateStmt *stmt) {
         const std::string &colName = pr.first;
         Expr *e = pr.second.get();
         Column col = catalog_.getColumnInfo(stmt->table, colName);
-        // Resolve column refs in e
+        // Resolve column refs and function calls in e
         resolveColumnsInExpr(e, {stmt->table});
         typeCheckExpr(e, {stmt->table});
         // Type-check literal assignment
@@ -160,25 +161,39 @@ std::string Binder::qualifyColumn(const std::string &col, const std::vector<std:
 }
 
 void Binder::resolveColumnsInExpr(Expr *expr, const std::vector<std::string> &tables) {
-    if (expr->type == Expr::Type::COLUMN_REF) {
+    switch (expr->type) {
+      case Expr::Type::COLUMN_REF:
         expr->columnName = qualifyColumn(expr->columnName, tables);
-    } else if (expr->type == Expr::Type::BINARY_OP) {
+        break;
+      case Expr::Type::BINARY_OP:
         resolveColumnsInExpr(expr->left.get(), tables);
         resolveColumnsInExpr(expr->right.get(), tables);
+        break;
+      case Expr::Type::FUNCTION_CALL:
+        // Resolve each argument, then ensure function exists
+        for (auto &arg : expr->args) {
+            resolveColumnsInExpr(arg.get(), tables);
+        }
+        if (!FunctionRegistry::hasFunction(expr->functionName)) {
+            throw std::runtime_error("Unknown function: " + expr->functionName);
+        }
+        break;
+      default:
+        break;
     }
 }
 
 void Binder::typeCheckExpr(Expr *expr, const std::vector<std::string> &tables) {
-    if (expr->type == Expr::Type::BINARY_OP) {
+    switch (expr->type) {
+      case Expr::Type::BINARY_OP: {
         // Recurse
         typeCheckExpr(expr->left.get(), tables);
         typeCheckExpr(expr->right.get(), tables);
         // Determine operand types
         auto getType = [&](Expr *e) -> DataType {
-            if (e->type == Expr::Type::INT_LITERAL) return DataType::INT;
-            if (e->type == Expr::Type::STR_LITERAL) return DataType::STRING;
+            if (e->type == Expr::Type::INT_LITERAL)   return DataType::INT;
+            if (e->type == Expr::Type::STR_LITERAL)   return DataType::STRING;
             if (e->type == Expr::Type::COLUMN_REF) {
-                // split table.col
                 auto pos = e->columnName.find('.');
                 auto t = e->columnName.substr(0, pos);
                 auto c = e->columnName.substr(pos + 1);
@@ -189,15 +204,28 @@ void Binder::typeCheckExpr(Expr *expr, const std::vector<std::string> &tables) {
         DataType lt = getType(expr->left.get());
         DataType rt = getType(expr->right.get());
         // Comparison ops
-        if (expr->op == "=" || expr->op == "<>" || expr->op == "<" || expr->op == ">" ||
-            expr->op == "<=" || expr->op == ">=") {
+        if (expr->op == "=" || expr->op == "<>" ||
+            expr->op == "<" || expr->op == ">" ||
+            expr->op == "<="|| expr->op == ">=") {
             if (lt != rt)
                 throw std::runtime_error("Type mismatch in comparison: " + expr->op);
         } else if (expr->op == "AND" || expr->op == "OR") {
-            // left and right must be comparison or boolean
-            // For simplicity, we assume comparisons are valid boolean
+            // assume comparisons are valid boolean
         } else {
             throw std::runtime_error("Unsupported operator in WHERE: " + expr->op);
         }
+        break;
+      }
+      case Expr::Type::FUNCTION_CALL:
+        // Type-check each argument
+        for (auto &arg : expr->args) {
+            // first resolve columns (already done) then type-check
+            typeCheckExpr(arg.get(), tables);
+        }
+        // (Optionally you could validate arity/signature here,
+        //  but we rely on the UDF itself to throw on bad args.)
+        break;
+      default:
+        break;
     }
 }

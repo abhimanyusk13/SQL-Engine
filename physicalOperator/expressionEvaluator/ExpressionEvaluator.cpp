@@ -1,4 +1,6 @@
+// File: ExpressionEvaluator.cpp
 #include "ExpressionEvaluator.h"
+#include "FunctionRegistry.h"
 #include <stdexcept>
 #include <algorithm>
 
@@ -25,10 +27,10 @@ FieldValue ExpressionEvaluator::eval(const Expr *expr,
             if (std::holds_alternative<int32_t>(l) && std::holds_alternative<int32_t>(r)) {
                 int32_t lv = std::get<int32_t>(l);
                 int32_t rv = std::get<int32_t>(r);
-                if (op == "+") return lv + rv;
-                if (op == "-") return lv - rv;
-                if (op == "*") return lv * rv;
-                if (op == "/") return lv / rv;
+                if (op == "+")  return lv + rv;
+                if (op == "-")  return lv - rv;
+                if (op == "*")  return lv * rv;
+                if (op == "/")  return lv / rv;
                 if (op == "=")  return (int32_t)(lv == rv);
                 if (op == "<>") return (int32_t)(lv != rv);
                 if (op == "<")  return (int32_t)(lv < rv);
@@ -36,8 +38,9 @@ FieldValue ExpressionEvaluator::eval(const Expr *expr,
                 if (op == "<=") return (int32_t)(lv <= rv);
                 if (op == ">=") return (int32_t)(lv >= rv);
             }
-            // STRING ops or mixed
-            if (std::holds_alternative<std::string>(l) && std::holds_alternative<std::string>(r)) {
+            // STRING ops
+            if (std::holds_alternative<std::string>(l) &&
+                std::holds_alternative<std::string>(r)) {
                 const auto &ls = std::get<std::string>(l);
                 const auto &rs = std::get<std::string>(r);
                 if (op == "=")  return (int32_t)(ls == rs);
@@ -47,10 +50,24 @@ FieldValue ExpressionEvaluator::eval(const Expr *expr,
                 if (op == "<=") return (int32_t)(ls <= rs);
                 if (op == ">=") return (int32_t)(ls >= rs);
             }
-            // AND/OR boolean (treated as int)
-            if (op == "AND") return (int32_t)(evalBoolean(expr->left.get(), row, colIdx) && evalBoolean(expr->right.get(), row, colIdx));
-            if (op == "OR")  return (int32_t)(evalBoolean(expr->left.get(), row, colIdx) || evalBoolean(expr->right.get(), row, colIdx));
+            // AND/OR boolean
+            if (op == "AND")
+                return (int32_t)(evalBoolean(expr->left.get(), row, colIdx)
+                               && evalBoolean(expr->right.get(),row,colIdx));
+            if (op == "OR")
+                return (int32_t)(evalBoolean(expr->left.get(), row, colIdx)
+                               || evalBoolean(expr->right.get(),row,colIdx));
             throw std::runtime_error("Unsupported operator in eval: " + op);
+        }
+        case Expr::Type::FUNCTION_CALL: {
+            // Evaluate arguments
+            std::vector<FieldValue> args;
+            args.reserve(expr->args.size());
+            for (auto &arg : expr->args) {
+                args.push_back(eval(arg.get(), row, colIdx));
+            }
+            // Invoke the UDF
+            return FunctionRegistry::getFunction(expr->functionName)(args);
         }
         default:
             throw std::runtime_error("Unsupported expr type in eval");
@@ -58,8 +75,8 @@ FieldValue ExpressionEvaluator::eval(const Expr *expr,
 }
 
 bool ExpressionEvaluator::evalBoolean(const Expr *expr,
-                                       const physical::Row &row,
-                                       const std::unordered_map<std::string,int> &colIdx) {
+                                      const physical::Row &row,
+                                      const std::unordered_map<std::string,int> &colIdx) {
     FieldValue v = eval(expr, row, colIdx);
     if (std::holds_alternative<int32_t>(v))
         return std::get<int32_t>(v) != 0;
