@@ -10,7 +10,6 @@
 class Optimizer {
 public:
     // Optimize a bushy join tree for two tables (extension needed for more tables)
-    // Here we implement pairwise join order optimization using dynamic programming
     LogicalOperator* optimizeJoins(const std::vector<std::string> &tables,
                                    const CostModel &costModel,
                                    const std::unordered_map<std::string, LogicalOperator*> &scans) {
@@ -44,7 +43,6 @@ public:
                 double c = costModel.costJoin(L.cost, R.cost, L.rows, R.rows);
                 if (c < dp[mask].cost) {
                     // Create a LogicalFilter or Join node (not defined)
-                    // Here we wrap as Filter for demonstration
                     dp[mask].cost = c;
                     dp[mask].rows = estRows;
                     dp[mask].plan = new LogicalFilter(/* predicate */ nullptr, L.plan);

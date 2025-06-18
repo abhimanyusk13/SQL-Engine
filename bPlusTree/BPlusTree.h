@@ -303,4 +303,3 @@ std::vector<Value> BPlusTree<Key,Value>::rangeScan(const Key &low, const Key &hi
 
 // File: BPlusTree.cpp
 #include "BPlusTree.h"
-// Template implementation is in header. No CPP code needed. You can add explicit instantiations here if desired.
